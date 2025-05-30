@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import base64
 import io
 import json
@@ -22,7 +21,6 @@ try:
 except ImportError:
     convert_from_path = None
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Langfuse Configuration (via environment variables)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -33,28 +31,27 @@ os.environ.setdefault("LANGFUSE_SECRET_KEY", LANGFUSE_SECRET_KEY)
 os.environ.setdefault("LANGFUSE_PUBLIC_KEY", LANGFUSE_PUBLIC_KEY)
 os.environ.setdefault("LANGFUSE_HOST", LANGFUSE_HOST)
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Streamlit App Configuration
 # ──────────────────────────────────────────────────────────────────────────────
+
 st.set_page_config(page_title="Document Data Extractor", layout="centered")
 
 # Let the user select driver’s license vs. insurance card
 doc_type = st.selectbox("Select Document Type", ["Driver's License", "Insurance Card"])
+
 if doc_type == "Driver's License":
     st.title("🪪 ➜ 📋 Driver-License Data Extractor")
 else:
     st.title("🩺 ➜ 📋 Insurance-Card Data Extractor")
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Fields & Instructions
-# ──────────────────────────────────────────────────────────────────────────────
+# Fields for driver's license
 DL_FIELDS = [
     "license_number", "class", "first_name", "middle_name", "last_name",
     "address", "city", "state", "zip", "date_of_birth", "issue_date",
     "expiration_date", "sex", "eye_color", "hair", "height", "organ_donor", "weight"
 ]
+
 SYSTEM_PROMPT_DL = (
     "You are an identity-document data extractor. "
     "Extract the following fields from a U.S. driver's-license image and return *only* valid JSON "
@@ -63,6 +60,7 @@ SYSTEM_PROMPT_DL = (
     + ". Use ISO-8601 dates (YYYY-MM-DD). If a field is missing, set its value to an empty string."
 )
 
+# Fields for insurance card (example set for a Medicare-style card)
 IC_FIELDS = [
     "beneficiary_name",
     "member_id",
@@ -75,6 +73,7 @@ IC_FIELDS = [
     "coverage_part_b_effective_date",
     "date_of_birth"
 ]
+
 SYSTEM_PROMPT_IC = (
     "You are an identity-document data extractor. "
     "Extract the following fields from a U.S. insurance card (e.g. Medicare) and return *only* valid JSON "
@@ -82,28 +81,6 @@ SYSTEM_PROMPT_IC = (
     + ", ".join(IC_FIELDS)
     + ". Use ISO-8601 dates (YYYY-MM-DD). If a field is missing, set its value to an empty string."
 )
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Helper: Safely parse model output into a dict
-# ──────────────────────────────────────────────────────────────────────────────
-def parse_model_output(json_str: str) -> dict:
-    """
-    Ensures we return a dictionary even if the model response is a list.
-    """
-    try:
-        data = json.loads(json_str)
-    except json.JSONDecodeError:
-        return {}
-    if isinstance(data, list):
-        # If it's an empty list, return an empty dict; if we have at least one item,
-        # use the first item if it is a dict.
-        if data and isinstance(data[0], dict):
-            return data[0]
-        else:
-            return {}
-    return data if isinstance(data, dict) else {}
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Sidebar — API Key & Client Initialization
@@ -158,7 +135,6 @@ with st.sidebar:
         "⚠️ **Privacy reminder:** ensure you are authorized to process any personal data you upload."
     )
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Utility Functions
 # ──────────────────────────────────────────────────────────────────────────────
@@ -172,16 +148,13 @@ def _file_to_images(path: Path) -> List[Image.Image]:
         return [Image.open(path)]
     raise ValueError(f"Unsupported file type: {path}")
 
-
 def _pil_to_base64(img: Image.Image) -> str:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode()
 
-
 def file_to_base64_chunks(path: Path) -> List[str]:
     return [_pil_to_base64(im.convert("RGB")) for im in _file_to_images(path)]
-
 
 def render_fields_grid(container, title: str, data: dict, fields: List[str], num_cols: int = 3):
     container.subheader(title)
@@ -190,26 +163,22 @@ def render_fields_grid(container, title: str, data: dict, fields: List[str], num
         col = cols[idx % num_cols]
         label = field.replace("_", " ").title()
         value = data.get(field, "") or ""
-        col.markdown(
-            f"""
-            <div style="display:flex; flex-direction:column; gap:4px;">
-                <div style="font-weight:bold;">{label}</div>
-                <div style="
-                    background-color:#f8f9fa;
-                    padding:8px;
-                    border-radius:6px;
-                    color:#111;
-                    min-height:38px;
-                    font-family:monospace;
-                    font-size:0.95em;
-                    word-wrap:break-word;
-                    border: 1px solid #ddd;
-                ">{value}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
+        col.markdown(f"""
+        <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="font-weight:bold;">{label}</div>
+            <div style="
+                background-color:#f8f9fa;
+                padding:8px;
+                border-radius:6px;
+                color:#111;
+                min-height:38px;
+                font-family:monospace;
+                font-size:0.95em;
+                word-wrap:break-word;
+                border: 1px solid #ddd;
+            ">{value}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Model Invocation Functions for DRIVER’S LICENSE
@@ -237,8 +206,7 @@ def gpt4_1_mini_dl_from_images(b64_images: List[str]) -> dict:
         stream=False,
         max_tokens=4096,
     )
-    return parse_model_output(resp.choices[0].message.content)
-
+    return json.loads(resp.choices[0].message.content)
 
 @observe(as_type="generation", name="GPT-4.1 DL Extraction")
 def gpt4_1_dl_from_images(b64_images: List[str]) -> dict:
@@ -263,8 +231,7 @@ def gpt4_1_dl_from_images(b64_images: List[str]) -> dict:
         stream=False,
         max_tokens=4096,
     )
-    return parse_model_output(resp.choices[0].message.content)
-
+    return json.loads(resp.choices[0].message.content)
 
 @observe(as_type="generation", name="Gemini 2.0 Flash DL Extraction")
 def gemini_dl_from_images(b64_images: List[str]) -> dict:
@@ -283,8 +250,7 @@ def gemini_dl_from_images(b64_images: List[str]) -> dict:
         ),
         contents=image_parts
     )
-    return parse_model_output(response.text)
-
+    return json.loads(response.text)
 
 @observe(as_type="generation", name="Gemini 2.5 Flash DL Extraction")
 def gemini_2_5_dl_from_images(b64_images: List[str]) -> dict:
@@ -303,8 +269,7 @@ def gemini_2_5_dl_from_images(b64_images: List[str]) -> dict:
         ),
         contents=image_parts
     )
-    return parse_model_output(response.text)
-
+    return json.loads(response.text)
 
 @observe(as_type="custom", name="AWS Textract DL Extraction")
 def textract_dl_from_images(path: Path) -> dict:
@@ -331,9 +296,10 @@ def textract_dl_from_images(path: Path) -> dict:
         "organ_donor": ["organ donor"],
         "weight": ["weight"]
     }
-    results = {k: "" for k in DL_FIELDS}
 
+    results = {k: "" for k in DL_FIELDS}
     images = _file_to_images(path)
+
     for img in images:
         buf = io.BytesIO()
         img.convert("RGB").save(buf, format="PNG")
@@ -343,14 +309,8 @@ def textract_dl_from_images(path: Path) -> dict:
         )
         blocks = resp.get('Blocks', [])
         block_map = {b['Id']: b for b in blocks}
-        key_map = {
-            b['Id']: b for b in blocks
-            if b['BlockType'] == 'KEY_VALUE_SET' and 'KEY' in b.get('EntityTypes', [])
-        }
-        value_map = {
-            b['Id']: b for b in blocks
-            if b['BlockType'] == 'KEY_VALUE_SET' and 'VALUE' in b.get('EntityTypes', [])
-        }
+        key_map = {b['Id']: b for b in blocks if b['BlockType'] == 'KEY_VALUE_SET' and 'KEY' in b.get('EntityTypes', [])}
+        value_map = {b['Id']: b for b in blocks if b['BlockType'] == 'KEY_VALUE_SET' and 'VALUE' in b.get('EntityTypes', [])}
 
         def get_text(block):
             text = ""
@@ -380,12 +340,13 @@ def textract_dl_from_images(path: Path) -> dict:
                 if any(keyword in key_text for keyword in keywords):
                     results[field] = val_text
                     break
-    return results
 
+    return results
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Model Invocation Functions for INSURANCE CARD
 # ──────────────────────────────────────────────────────────────────────────────
+
 @observe(as_type="generation", name="GPT-4.1-mini Insurance Extraction")
 def gpt4_1_mini_insurance_from_images(b64_images: List[str]) -> dict:
     messages = [
@@ -409,8 +370,7 @@ def gpt4_1_mini_insurance_from_images(b64_images: List[str]) -> dict:
         stream=False,
         max_tokens=4096,
     )
-    return parse_model_output(resp.choices[0].message.content)
-
+    return json.loads(resp.choices[0].message.content)
 
 @observe(as_type="generation", name="GPT-4.1 Insurance Extraction")
 def gpt4_1_insurance_from_images(b64_images: List[str]) -> dict:
@@ -435,8 +395,7 @@ def gpt4_1_insurance_from_images(b64_images: List[str]) -> dict:
         stream=False,
         max_tokens=4096,
     )
-    return parse_model_output(resp.choices[0].message.content)
-
+    return json.loads(resp.choices[0].message.content)
 
 @observe(as_type="generation", name="Gemini 2.0 Flash Insurance Extraction")
 def gemini_insurance_from_images(b64_images: List[str]) -> dict:
@@ -455,8 +414,7 @@ def gemini_insurance_from_images(b64_images: List[str]) -> dict:
         ),
         contents=image_parts
     )
-    return parse_model_output(response.text)
-
+    return json.loads(response.text)
 
 @observe(as_type="generation", name="Gemini 2.5 Flash Insurance Extraction")
 def gemini_2_5_insurance_from_images(b64_images: List[str]) -> dict:
@@ -475,8 +433,7 @@ def gemini_2_5_insurance_from_images(b64_images: List[str]) -> dict:
         ),
         contents=image_parts
     )
-    return parse_model_output(response.text)
-
+    return json.loads(response.text)
 
 @observe(as_type="custom", name="AWS Textract Insurance Extraction")
 def textract_ic_from_images(path: Path) -> dict:
@@ -495,9 +452,10 @@ def textract_ic_from_images(path: Path) -> dict:
         "coverage_part_b_effective_date": ["part b eff date", "medical eff", "part b start"],
         "date_of_birth": ["date of birth", "dob"]
     }
-    results = {k: "" for k in IC_FIELDS}
 
+    results = {k: "" for k in IC_FIELDS}
     images = _file_to_images(path)
+
     for img in images:
         buf = io.BytesIO()
         img.convert("RGB").save(buf, format="PNG")
@@ -546,7 +504,6 @@ def textract_ic_from_images(path: Path) -> dict:
                     break
 
     return results
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Streamlit UI
@@ -623,12 +580,10 @@ if uploaded_file and openai.api_key and gemini_key:
             # Show results
             st.success("Extraction complete!")
             col_img, col_models = st.columns([1, 2], gap="large")
-
             with col_img:
                 st.subheader("🖼️ Converted Image(s)")
                 for idx, img in enumerate(images, start=1):
                     st.image(img, caption=f"Page {idx}", use_container_width=True)
-
             with col_models:
                 tabs = st.tabs([
                     "🤖 GPT-4.1-mini Fields",
@@ -659,6 +614,7 @@ if uploaded_file and openai.api_key and gemini_key:
 
         else:
             # Insurance Card extractions
+
             # GPT-4.1-mini
             with st.spinner("Extracting with GPT-4.1-mini …"):
                 try:
@@ -702,12 +658,10 @@ if uploaded_file and openai.api_key and gemini_key:
             # Show results
             st.success("Extraction complete!")
             col_img, col_models = st.columns([1, 2], gap="large")
-
             with col_img:
                 st.subheader("🖼️ Converted Image(s)")
                 for idx, img in enumerate(images, start=1):
                     st.image(img, caption=f"Page {idx}", use_container_width=True)
-
             with col_models:
                 tabs = st.tabs([
                     "🤖 GPT-4.1-mini Fields",
